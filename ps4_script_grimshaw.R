@@ -190,3 +190,51 @@ rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
 
 rmse_by_var(fc_var1)
 rmse_by_var(fc_var4)
+
+# 4.3a
+bvar_cv <- function(lambda) {
+  pr <- bv_priors(hyper = "lambda",
+                  mn = bv_mn(lambda = bv_lambda(mode = lambda, sd = 0.4,
+                                                min = 0.999 * lambda,
+                                                max = 1.001 * lambda),
+                             b = 0))
+  
+  fc <- NULL
+  for (T in origins) {
+    fit_T <- bvar(y[1:T, ], lags = 4, priors = pr,
+                  n_draw = 2000, n_burn = 1000, verbose = FALSE)
+    x <- c(1, t(y[T:(T - 3), ]))
+    fc <- rbind(fc, x %*% coef(fit_T))
+  }
+  fc
+}
+set.seed(422)
+
+fc_bvar_03 <- bvar_cv(0.3)
+
+saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+
+# 4.3b
+set.seed(422)
+
+fc_bvar_005 <- bvar_cv(0.05)
+saveRDS(fc_bvar_005, "results/fc_bvar_005.rds")
+var_results <- tibble(
+  Variable = colnames(y),
+  `VAR(1)` = rmse_by_var(fc_var1),
+  `VAR(4)` = rmse_by_var(fc_var4),
+  `BVAR(4), lambda = 0.3` = rmse_by_var(fc_bvar_03),
+  `BVAR(4), lambda = 0.05` = rmse_by_var(fc_bvar_005)
+)
+saveRDS(var_results, "results/var_results.rds")
+var_results |> knitr::kable(digits = 3)
+
+# 4.3c
+e_var4 <- actual[, "gdp"] - fc_var4[, 1]
+e_bvar <- actual[, "gdp"] - fc_bvar_03[, 1]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+e_var4_infl <- actual[, "infl"] - fc_var4[, 5]
+e_bvar_infl <- actual[, "infl"] - fc_bvar_03[, 5]
+
+forecast::dm.test(e_var4_infl, e_bvar_infl, h = 1, power = 2)
