@@ -238,3 +238,66 @@ e_var4_infl <- actual[, "infl"] - fc_var4[, 5]
 e_bvar_infl <- actual[, "infl"] - fc_bvar_03[, 5]
 
 forecast::dm.test(e_var4_infl, e_bvar_infl, h = 1, power = 2)
+
+# 5.1a
+md_raw <- read_csv(
+  "data/fredmd_2026-09.csv",
+  show_col_types = FALSE
+)
+
+tcode <- unlist(md_raw[1, -1])
+
+md <- md_raw[-1, ] |>
+  mutate(date = as.Date(sasdate, "%m/%d/%Y"))
+
+# 5.1b
+transform_series <- function(x, code) {
+  d <- function(v) c(NA, diff(v))
+  switch(as.character(code),
+         "1" = x,
+         "2" = d(x),
+         "3" = d(d(x)),
+         "4" = log(x),
+         "5" = 100 * d(log(x)),
+         "6" = 100 * d(d(log(x))),
+         "7" = d(x / dplyr::lag(x) - 1)
+  )
+}
+
+fm <- map2_dfc(md[names(tcode)], tcode, transform_series) |>
+  mutate(date = md$date, .before = 1) |>
+  filter(date >= as.Date("1960-03-01"),
+         date <= as.Date("2019-12-01"))
+
+fm <- fm[, colSums(is.na(fm)) == 0]
+
+dim(fm)
+
+# 5.1c
+tcode[c("INDPRO", "PAYEMS", "CPIAUCSL", "FEDFUNDS")]
+
+# 5.2a
+Z <- fm |> select(-date) |> as.matrix()
+
+pc <- prcomp(scale(Z))
+
+summary(pc)$importance[, 1:5]
+
+# 5.2b
+F1 <- pc$x[, 1] * sign(cor(pc$x[, 1], fm$INDPRO))
+
+tibble(date = fm$date, F1 = F1) |>
+  ggplot(aes(date, F1)) +
+  geom_line() +
+  labs(
+    title = "First Factor from FRED-MD",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal()
+
+# 5.2c
+sort(abs(cor(pc$x[, 1], Z))[1, ], decreasing = TRUE)[1:8]
+
+sort(abs(cor(pc$x[, 2], Z))[1, ], decreasing = TRUE)[1:8]
+
